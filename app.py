@@ -1,75 +1,82 @@
 import streamlit as st
+import pandas as pd
 
-# 设置页面
-st.set_page_config(page_title="AI 读心术 - 猜人物", page_icon="🔮")
+# --- 1. 核心知识库 (这里你可以尽情扩展特征) ---
+# 特征定义：1代表是，-1代表不是，0代表不确定
+@st.cache_data
+def get_knowledge_base():
+    return pd.DataFrame([
+        {"人物": "孙悟空", "虚构": 1, "男性": 1, "中国": 1, "战斗力强": 1, "现代": -1, "科学家": -1},
+        {"人物": "周杰伦", "虚构": -1, "男性": 1, "中国": 1, "战斗力强": -1, "现代": 1, "科学家": -1},
+        {"人物": "居里夫人", "虚构": -1, "男性": -1, "中国": -1, "战斗力强": -1, "现代": -1, "科学家": 1},
+        {"人物": "马斯克", "虚构": -1, "男性": 1, "中国": -1, "战斗力强": -1, "现代": 1, "科学家": 1},
+        {"人物": "那鲁多(鸣人)", "虚构": 1, "男性": 1, "中国": -1, "战斗力强": 1, "现代": -1, "科学家": -1},
+        {"人物": "林黛玉", "虚构": 1, "男性": -1, "中国": 1, "战斗力强": -1, "现代": -1, "科学家": -1},
+    ])
 
-st.title("🔮 AI 读心术：猜猜我想谁？")
-st.write("请在心中想一个著名人物（现实或虚构），我会通过几个问题猜出他/她！")
+# --- 2. 初始化游戏状态 ---
+if 'scores' not in st.session_state:
+    kb = get_knowledge_base()
+    st.session_state.kb = kb
+    st.session_state.scores = {name: 0 for name in kb["人物"]}
+    st.session_state.asked_questions = []
+    st.session_state.game_over = False
 
-# 初始化会话状态，用于存储回答记录
-if 'step' not in st.session_state:
-    st.session_state.step = 0
-    st.session_state.answers = {}
+# --- 3. 页面布局 ---
+st.set_page_config(page_title="Pro级 AI 读心术", page_icon="🧠")
+st.title("🧠 深度 AI 读心术 (Pro)")
+st.write("想一个名人，我将通过逻辑推理锁定他。")
 
-# 人物数据库（简化版，你可以不断扩充）
-# 逻辑：特征组合 -> 目标人物
-DATABASE = [
-    {"name": "孙悟空", "real": False, "male": True, "china": True, "magic": True},
-    {"name": "周杰伦", "real": True, "male": True, "china": True, "magic": False},
-    {"name": "爱因斯坦", "real": True, "male": True, "china": False, "magic": False},
-    {"name": "艾莎 (Elsa)", "real": False, "male": False, "china": False, "magic": True},
-    {"name": "花木兰", "real": False, "male": False, "china": True, "magic": False},
-    {"name": "马斯克", "real": True, "male": True, "china": False, "magic": False}
-]
-
-# 问题列表
-QUESTIONS = [
-    {"key": "real", "text": "该人物是真实存在的吗？"},
-    {"key": "male", "text": "该人物是男性吗？"},
-    {"key": "china", "text": "该人物是中国人/源自中国文化吗？"},
-    {"key": "magic", "text": "该人物拥有超能力或魔法吗？"}
-]
-
-def reset_game():
-    st.session_state.step = 0
-    st.session_state.answers = {}
-
-# 游戏主逻辑
-if st.session_state.step < len(QUESTIONS):
-    current_q = QUESTIONS[st.session_state.step]
-    st.subheader(f"问题 {st.session_state.step + 1}:")
-    st.write(f"### {current_q['text']}")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("👍 是的", use_container_width=True):
-            st.session_state.answers[current_q['key']] = True
-            st.session_state.step += 1
-            st.rerun()
-    with col2:
-        if st.button("👎 不是", use_container_width=True):
-            st.session_state.answers[current_q['key']] = False
-            st.session_state.step += 1
-            st.rerun()
-
-else:
-    # 计算匹配度
-    best_match = None
-    max_score = -1
-
-    for person in DATABASE:
-        score = sum(1 for k, v in st.session_state.answers.items() if person.get(k) == v)
-        if score > max_score:
-            max_score = score
-            best_match = person['name']
-
-    st.balloons()
-    st.success(f"### 我猜到了！你心里想的候选人可能是：**{best_match}**")
-    st.write("（匹配度越高，结果越准。如果不对，可能是我的数据库还不够大！）")
+# --- 4. 自动选择最佳问题的逻辑 ---
+def get_best_question():
+    # 找出还没问过的特征列
+    all_features = [c for c in st.session_state.kb.columns if c != "人物"]
+    remaining_features = [f for f in all_features if f not in st.session_state.asked_questions]
     
-    if st.button("再玩一次"):
-        reset_game()
+    if not remaining_features:
+        return None
+    
+    # 这里简单使用第一个，进阶版可以计算信息增益(Information Gain)
+    return remaining_features[0]
+
+# --- 5. 游戏交互主循环 ---
+if not st.session_state.game_over:
+    current_q = get_best_question()
+    
+    if current_q:
+        st.subheader(f"分析中... 当前目标特征：**{current_q}**")
+        progress = len(st.session_state.asked_questions) / (len(st.session_state.kb.columns)-1)
+        st.progress(progress)
+        
+        q_text = f"请问该人物是否具有【{current_q}】的特征？"
+        st.markdown(f"### {q_text}")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("✅ 是的", use_container_width=True):
+                for idx, row in st.session_state.kb.iterrows():
+                    st.session_state.scores[row["人物"]] += row[current_q]
+                st.session_state.asked_questions.append(current_q)
+                st.rerun()
+        with col2:
+            if st.button("❌ 不是", use_container_width=True):
+                for idx, row in st.session_state.kb.iterrows():
+                    st.session_state.scores[row["人物"]] -= row[current_q]
+                st.session_state.asked_questions.append(current_q)
+                st.rerun()
+        with col3:
+            if st.button("❔ 不确定", use_container_width=True):
+                st.session_state.asked_questions.append(current_q)
+                st.rerun()
+    else:
+        st.session_state.game_over = True
         st.rerun()
 
-st.sidebar.markdown("---")
-st.sidebar.info("这个应用展示了决策树算法的基本原理。你可以通过增加 `DATABASE` 里的词条来让它变得更聪明！")
+# --- 6. 结算界面 ---
+else:
+    # 按分数排序
+    sorted_scores = sorted(st.session_state.scores.items(), key=lambda x: x[1], reverse=True)
+    winner, score = sorted_scores[0]
+    
+    st.balloons()
+    st
